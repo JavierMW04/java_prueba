@@ -1,0 +1,254 @@
+/*
+ * ===========================================================================
+ * Materiales con licencia - Propiedad de IBM
+ *
+ * (C) Copyright IBM Corp. 2000 Reservados todos los derechos.
+ *
+ *  Derechos restringidos de los usuarios del Gobierno de EE. UU.
+ *  El uso, la reproducción o la divulgación están sujetos a las
+ *  restricciones establecidas por GSA ADP Schedule Contract con IBM Corp.
+ * ===========================================================================
+ *
+ * Archivo: HelloWorld.java
+ */
+
+import java.io.*;
+import java.util.*;
+import java.security.Principal;
+import java.security.PrivilegedAction;
+import javax.security.auth.*;
+import javax.security.auth.callback.*
+import javax.security.auth.login.*;
+import javax.security.auth.spi.*;
+
+/**
+ * Esta aplicación SampleLogin intenta autenticar a un usuario.
+ *
+ * Si el usuario se autentica satisfactoriamente,
+ * se visualiza el nombre de usuario y el número de credenciales.
+ *
+ * @version 1.1, 09/14/99
+ */
+public class HelloWorld {
+
+    /**
+     * Intentar autenticar al usuario.
+     */
+    public static void main(String[] args) {
+        // usar los módulos LoginModule configurados para la entrada "helloWorld"
+        LoginContext lc = null;
+        try {
+            lc = new LoginContext("helloWorld", new MyCallbackHandler());
+        } catch (LoginException le) {
+            le.printStackTrace();
+            System.exit(-1);
+        }
+
+        // El usuario tiene 3 intentos para autenticarse satisfactoriamente.
+        int i;
+        for (i = 0; i < 3; i++) {
+            try {
+
+                // intentar autenticación
+                lc.login();
+
+                // Si no se devuelve ninguna excepción,
+                // la autenticación ha sido satisfactoria.
+                break;
+
+            } catch (AccountExpiredException aee) {
+
+                System.out.println("Su cuenta ha caducado");
+                System.exit(-1);
+
+            } catch (CredentialExpiredException cee) {
+
+                System.out.println("Sus credenciales han caducado.");
+                System.exit(-1);
+
+            } catch (FailedLoginException fle) {
+
+                System.out.println("Autenticación fallida");
+                    try {
+                        Thread.currentThread().sleep(3000);
+                    } catch (Exception e) {
+                        // Ignorar
+                    }
+
+            } catch (Exception e) {
+
+                System.out.println("Excepción no prevista - imposible continuar");
+                e.printStackTrace();
+                System.exit(-1);
+            }
+        }
+
+        // ¿Se ha fallado tres veces?
+        if (i == 3) {
+            System.out.println("Lo lamentamos");
+            System.exit(-1);
+        }
+
+        // Veamos qué Principales tenemos:
+        Iterator principalIterator = lc.getSubject().getPrincipals().iterator();
+        System.out.println("\n\nEl usuario autenticado tiene los siguientes Principales:");
+        while (principalIterator.hasNext()) {
+            Principal p = (Principal)principalIterator.next();
+            System.out.println("\t" + p.toString());
+        }
+
+        // Examinemos parte del trabajo basado en Principal:
+        Subject.doAsPrivileged(lc.getSubject(), new PrivilegedAction() {
+            public Object run() {
+                System.out.println("\nSu propiedad java.home: "
+                                +System.getProperty("java.home"));
+
+                System.out.println("\nSu propiedad user.home: "
+                                +System.getProperty("user.home"));
+
+                File f = new File("foo.txt");
+                System.out.print("\nfoo.txt does ");
+                if (!f.exists()) System.out.print("not ");
+                System.out.println("existe en el directorio actual");
+
+                System.out.println("\nOh, por cierto ...");
+
+                try {
+                    Thread.currentThread().sleep(2000);
+                } catch (Exception e) {
+                    // Ignorar
+                }
+                System.out.println("\n\nHello World!\n");
+                return null;
+            }
+        }, null);
+        System.exit(0);
+    }
+}
+
+
+/**
+ * La aplicación debe implementar CallbackHandler.
+ *
+ * Esta aplicación está basada en texto. Por lo tanto, visualiza información
+ * ante el usuario mediante las corrientes de salida System.out y System.err,
+ * y reúne la entrada procedente del usuario que utiliza la corriente de entrada System.in.
+ */
+class MyCallbackHandler implements CallbackHandler {
+
+    /**
+     * Invocar una matriz de objetos Callback.
+     *
+     * 
+     * @param callbacks una matriz de objetos Callback que contiene
+     *          la información solicitada por un servicio de seguridad
+     *          subyacente y que se debe recuperar o visualizar.
+     *
+     * @exception java.io.IOException si se produce un error de entrada o de salida.
+     *
+     * @exception UnsupportedCallbackException si la implementación de este
+     *          método no da soporte a uno o más de los objetos Callback
+     *          especificados en el parámetro callbacks.
+     */
+    public void handle(Callback[] callbacks)
+    throws IOException, UnsupportedCallbackException {
+
+    for (int i = 0; i < callbacks.length; i++) {
+        if (callbacks[i] instanceof TextOutputCallback) {
+
+        // Visualiza el mensaje de acuerdo con el tipo especificado.
+        TextOutputCallback toc = (TextOutputCallback)callbacks[i];
+        switch (toc.getMessageType()) {
+        case TextOutputCallback.INFORMATION:
+            System.out.println(toc.getMessage());
+            break;
+        case TextOutputCallback.ERROR:
+            System.out.println("ERROR: " + toc.getMessage());
+            break;
+        case TextOutputCallback.WARNING:
+            System.out.println("AVISO: " + toc.getMessage());
+            break;
+        default:
+            throw new IOException("Tipo de mensaje no soportado: " +
+                    toc.getMessageType());
+        }
+
+        } else if (callbacks[i] instanceof NameCallback) {
+
+        // Solicitar al usuario un nombre de usuario.
+        NameCallback nc = (NameCallback)callbacks[i];
+
+        // Ignoraracer el defaultName proporcionado.
+        System.err.print(nc.getPrompt());
+        System.err.flush();
+        nc.setName((new BufferedReader
+            (new InputStreamReader(System.in))).readLine());
+
+        } else if (callbacks[i] instanceof PasswordCallback) {
+
+        // Solicitar al usuario información confidencial.
+        PasswordCallback pc = (PasswordCallback)callbacks[i];
+        System.err.print(pc.getPrompt());
+        System.err.flush();
+        pc.setPassword(readPassword(System.in));
+
+        } else {
+        throw new UnsupportedCallbackException
+            (callbacks[i], "Unrecognized Callback");
+        }
+    }
+    }
+
+    // Lee la contraseña de usuario en la corriente de entrada proporcionada.
+    private char[] readPassword(InputStream in) throws IOException {
+
+    char[] lineBuffer;
+    char[] buf;
+    int i;
+
+    buf = lineBuffer = new char[128];
+
+    int room = buf.length;
+    int offset = 0;
+    int c;
+
+    loop:   while (true) {
+        switch (c = in.read()) {
+        case -1:
+        case '\n':
+        break loop;
+
+        case '\r':
+        int c2 = in.read();
+        if ((c2 != '\n') && (c2 != -1)) {
+            if (!(in instanceof PushbackInputStream)) {
+            in = new PushbackInputStream(in);
+            }
+            ((PushbackInputStream)in).unread(c2);
+        } else
+            break loop;
+
+        default:
+        if (--room < 0) {
+            buf = new char[offset + 128];
+            room = buf.length - offset - 1;
+            System.arraycopy(lineBuffer, 0, buf, 0, offset);
+            Arrays.fill(lineBuffer, ' ');
+            lineBuffer = buf;
+        }
+        buf[offset++] = (char) c;
+        break;
+        }
+    }
+
+    if (offset == 0) {
+        return null;
+    }
+
+    char[] ret = new char[offset];
+    System.arraycopy(buf, 0, ret, 0, offset);
+    Arrays.fill(buf, ' ');
+
+    return ret;
+    }
+}
